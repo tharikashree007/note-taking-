@@ -14,43 +14,65 @@ function App() {
     loadNotes();
   }, []);
 
+  // ✅ SAFE FETCH (prevents .map crash)
   const loadNotes = async () => {
     try {
       const data = await fetchNotes();
-      setNotes(data || []);
+
+      console.log("API RESPONSE:", data);
+
+      // Normalize response (VERY IMPORTANT)
+      const notesArray = Array.isArray(data)
+        ? data
+        : data?.notes || data?.data || [];
+
+      setNotes(notesArray);
       setError(null);
     } catch (err) {
       console.error('Failed to fetch notes:', err);
       setError('Could not establish connection to the backend.');
+      setNotes([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ CREATE NOTE
   const handleAddNote = async (noteData) => {
     try {
       const newNote = await createNote(noteData);
-      setNotes([newNote, ...notes]);
+
+      setNotes((prev) => [newNote, ...prev]);
     } catch (err) {
       console.error('Failed to create note:', err);
       alert('Error creating note');
     }
   };
 
+  // ✅ UPDATE NOTE (MongoDB safe _id)
   const handleUpdateNote = async (id, updatedData) => {
     try {
       const updatedNote = await updateNote(id, updatedData);
-      setNotes(notes.map(note => note.id === id ? updatedNote : note));
+
+      setNotes((prev) =>
+        prev.map((note) =>
+          note._id === id ? updatedNote : note
+        )
+      );
     } catch (err) {
       console.error('Failed to update note:', err);
       alert('Error updating note');
     }
   };
 
+  // ✅ DELETE NOTE
   const handleDeleteNote = async (id) => {
     try {
       await deleteNote(id);
-      setNotes(notes.filter(note => note.id !== id));
+
+      setNotes((prev) =>
+        prev.filter((note) => note._id !== id)
+      );
     } catch (err) {
       console.error('Failed to delete note:', err);
       alert('Error deleting note');
@@ -74,7 +96,7 @@ function App() {
       </header>
 
       <main>
-        <div style={{ marginBottom: '3rem', maxWidth: '600px', margin: '0 auto 3rem auto' }}>
+        <div style={{ marginBottom: '3rem', maxWidth: '600px', margin: '0 auto' }}>
           <NoteForm onAddNote={handleAddNote} />
         </div>
 
@@ -97,13 +119,13 @@ function App() {
             className="my-masonry-grid"
             columnClassName="my-masonry-grid_column"
           >
-            {notes.map(note => (
-               <NoteCard
-                 key={note.id}
-                 note={note}
-                 onUpdate={handleUpdateNote}
-                 onDelete={handleDeleteNote}
-               />
+            {notes.map((note) => (
+              <NoteCard
+                key={note._id}
+                note={note}
+                onUpdate={handleUpdateNote}
+                onDelete={handleDeleteNote}
+              />
             ))}
           </Masonry>
         )}

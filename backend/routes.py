@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException
 from fastapi.encoders import jsonable_encoder
-from typing import List
 from models import NoteSchema, UpdateNoteModel
 from database import note_collection, note_helper
 from bson.objectid import ObjectId
@@ -8,46 +7,65 @@ from datetime import datetime
 
 router = APIRouter()
 
-@router.post("/", response_description="Add new note")
+
+# ✅ Create note
+@router.post("/")
 async def add_note(note: NoteSchema = Body(...)):
     note = jsonable_encoder(note)
     new_note = await note_collection.insert_one(note)
     created_note = await note_collection.find_one({"_id": new_note.inserted_id})
     return note_helper(created_note)
 
-@router.get("/", response_description="Get all notes")
+
+# ✅ Get all notes (IMPORTANT FOR .map())
+@router.get("/")
 async def get_notes():
     notes = []
     async for note in note_collection.find():
         notes.append(note_helper(note))
-    return notes
+    return notes   # ✔ MUST ALWAYS BE ARRAY
 
-@router.get("/{id}", response_description="Get a single note")
+
+# ✅ Get single note
+@router.get("/{id}")
 async def get_note(id: str):
-    if (note := await note_collection.find_one({"_id": ObjectId(id)})) is dict:
+    note = await note_collection.find_one({"_id": ObjectId(id)})
+    if note:
         return note_helper(note)
-    raise HTTPException(status_code=404, detail=f"Note {id} not found")
+    raise HTTPException(status_code=404, detail="Note not found")
 
-@router.put("/{id}", response_description="Update a note")
+
+# ✅ Update note
+@router.put("/{id}")
 async def update_note(id: str, req: UpdateNoteModel = Body(...)):
     req = {k: v for k, v in req.dict().items() if v is not None}
-    if len(req) >= 1:
-        req["updated_at"] = datetime.utcnow()
-        update_result = await note_collection.update_one(
-            {"_id": ObjectId(id)}, {"$set": req}
-        )
-        if update_result.modified_count == 1:
-            if (
-                updated_note := await note_collection.find_one({"_id": ObjectId(id)})
-            ) is not None:
-                return note_helper(updated_note)
-    if (existing_note := await note_collection.find_one({"_id": ObjectId(id)})) is not None:
-        return note_helper(existing_note)
-    raise HTTPException(status_code=404, detail=f"Note {id} not found")
 
-@router.delete("/{id}", response_description="Delete a note")
+    if req:
+        req["updated_at"] = datetime.utcnow()
+
+        update_result = await note_collection.update_one(
+            {"_id": ObjectId(id)},
+            {"$set": req}
+        )
+
+        if update_result.modified_count == 1:
+            updated_note = await note_collection.find_one({"_id": ObjectId(id)})
+            if updated_note:
+                return note_helper(updated_note)
+
+    existing_note = await note_collection.find_one({"_id": ObjectId(id)})
+    if existing_note:
+        return note_helper(existing_note)
+
+    raise HTTPException(status_code=404, detail="Note not found")
+
+
+# ✅ Delete note
+@router.delete("/{id}")
 async def delete_note(id: str):
     delete_result = await note_collection.delete_one({"_id": ObjectId(id)})
+
     if delete_result.deleted_count == 1:
         return {"message": "Note deleted successfully"}
-    raise HTTPException(status_code=404, detail=f"Note {id} not found")
+
+    raise HTTPException(status_code=404, detail="Note not found")
